@@ -3,10 +3,13 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <limits.h>
 
 //#define VERBOSE
 
-#define MAX_DISTANCE 256    // max distance between places randomly generated
+// use half of max integer value because we add two values later on (and we don't want overflows)
+// note that the max_distance in the example (256) was incorrect, because some distances where > 256
+#define MAX_DISTANCE INT_MAX/2
 
 /**
  * Apply the Floyd-Warshall algorithm to the adjacency matrix,
