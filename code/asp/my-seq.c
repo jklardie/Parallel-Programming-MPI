@@ -68,11 +68,14 @@ void free_matrix(int **matrix, int n){
 
 /**
  * Initialize a random adjacency matrix of size n x n.
+ *
+ * Return: total distance of usable roads
  */
-void init_random_adjacency_matrix(int n, int *num_edges, int ***matrix, int ***parent_matrix, int oriented){
+int init_random_adjacency_matrix(int n, int *num_edges, int ***matrix, int ***parent_matrix, int oriented){
     int **am;   // adjacency matrix
     int **pm;   // parent matrix
     int i, j, m = n * n;
+    int total_distance = 0;
 
     am = (int **) malloc(n * sizeof(int *));
     pm = (int **) malloc(n * sizeof(int *));
@@ -94,9 +97,18 @@ void init_random_adjacency_matrix(int n, int *num_edges, int ***matrix, int ***p
         // assign random distances to all edges
         for(j=0; j<i; j++){
             am[i][j] = 1 + (int)((double)MAX_DISTANCE * rand() / (RAND_MAX + 1.0));
+
+            if(am[i][j] < MAX_DISTANCE){
+                total_distance += am[i][j];
+            }
+
             if(oriented){
                 // oriented graph, so i to j can have a different distance than j to i
                 am[j][i] = 1 + (int)((double)MAX_DISTANCE * rand() / (RAND_MAX + 1.0));
+
+                if(am[j][i] < MAX_DISTANCE){
+                    total_distance += am[j][i];
+                }
             } else {
                 // not oriented so i to j has the same distance as j to i
                 am[j][i] = am[i][j];
@@ -117,12 +129,17 @@ void init_random_adjacency_matrix(int n, int *num_edges, int ***matrix, int ***p
     *matrix = am;
     *parent_matrix = pm;
     *num_edges = m;
+
+    return total_distance;
 }
 
 /**
  * Read the adjacency matrix from a file.
  *
- * Returns: the number of edges that are "incorrect" in the file. That is, in case
+ *
+ * Return: total distance of usable roads
+ *
+ * num_bad_edges: the number of edges that are "incorrect" in the file. That is, in case
  * the graph is not oriented, but there are different entries for symmetrical pairs
  * of edges, the second such edge is ignored, yet counted for statistics reasons.
  *
@@ -130,13 +147,15 @@ void init_random_adjacency_matrix(int n, int *num_edges, int ***matrix, int ***p
  *  - first line: [num vertices] [num edges] [oriented (0/1)]
  *  - following [num edges] lines: [source] [destination] [distance]
  */
-int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int ***matrix, int ***parent_matrix, int *oriented){
+int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int ***matrix, int ***parent_matrix, int *oriented, int *num_bad_edges){
     int **am;
     int **pm;
     int i, j;
     int n;
     int source, dest, dist;
-    int num_bad_edges = 0;
+    int total_distance = 0;
+
+    *num_bad_edges = 0;
     FILE *fp;
 
     fp = fopen(filename, "r");
@@ -182,13 +201,15 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
             if(am[i][j] < MAX_DISTANCE){
                 // verify that we did not set this distance yet.
                 // if we did, we increment the number of bad edges, and ignore the distance
-                num_bad_edges++;
+                (*num_bad_edges)++;
             } else {
                 am[i][j] = dist;
                 am[j][i] = dist;
+                total_distance += dist;
             }
         } else {
             am[i][j] = dist;
+            total_distance += dist;
         }
 
         // store parents, used to restore path later on
@@ -213,7 +234,7 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
     *matrix = am;
     *parent_matrix = pm;
 
-    return num_bad_edges;
+    return total_distance;
 }
 
 void usage() {
@@ -233,6 +254,7 @@ int main(int argc, char **argv){
     int **matrix;           // adjacency matrix
     int **parent_matrix;    // matrix used to restore paths
     int num_bad_edges = 0;  // number of bad edges in file
+    int total_distance = 0;
     char filename[100];     // filename if given as param
 
     struct timeval start, end;
@@ -260,10 +282,10 @@ int main(int argc, char **argv){
 
     if(num_vertices > 0){
         // init random adjacency matrix for testing
-        init_random_adjacency_matrix(num_vertices, &num_edges, &matrix, &parent_matrix, oriented);
+        total_distance = init_random_adjacency_matrix(num_vertices, &num_edges, &matrix, &parent_matrix, oriented);
     } else {
         // generate adjacency matrix from file
-        num_bad_edges = read_adjacency_matrix(filename, &num_vertices, &num_edges, &matrix, &parent_matrix, &oriented);
+        total_distance = read_adjacency_matrix(filename, &num_vertices, &num_edges, &matrix, &parent_matrix, &oriented, &num_bad_edges);
     }
 
     fprintf(stderr, "Running ASP with %d rows and %d edges (%d are bad)\n", num_vertices, num_edges, num_bad_edges);
@@ -283,6 +305,8 @@ int main(int argc, char **argv){
     time = (end.tv_sec + end.tv_usec / 1000000.0) -
             (start.tv_sec + start.tv_usec / 1000000.0);
 
+
+    fprintf(stderr, "Total distance: %d\n", total_distance);
     fprintf(stderr, "ASP took %10.3f seconds\n", time);
 
     if(print){
