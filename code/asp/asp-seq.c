@@ -202,8 +202,8 @@ void do_asp(int **tab, int n)
 void usage() {
 	printf ("Run the asp program with the following parameters. \n");
 	printf (" -read filename :: reads the graph from a file.\n");
-	printf (" -random N 0/1 :: generates a NxN graph, randomly. \n");
-	printf ("               :: if 1, the graph is oriented, otherwise it is not oriented\n");
+	printf (" -random N 0/1  :: generates a NxN graph, randomly. \n");
+	printf ("                :: if 1, the graph is oriented, otherwise it is not oriented\n");
 	return ;
 }	
 
