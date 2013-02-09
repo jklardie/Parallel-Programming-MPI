@@ -9,7 +9,9 @@
 
 // use half of max integer value because we add two values later on (and we don't want overflows)
 // note that the max_distance in the example (256) was incorrect, because some distances where > 256
-#define MAX_DISTANCE INT_MAX/2
+#define INFINITY INT_MAX/2
+
+#define MAX_RANDOM_DIST 256
 
 /**
  * Apply the Floyd-Warshall algorithm to the adjacency matrix,
@@ -68,7 +70,7 @@ void print_paths(int **matrix, int **parent_matrix, int n){
     for(i=0; i<n; i++){
         for(j=0; j<n; j++){
             // no path between i and j
-            if(matrix[i][j] == MAX_DISTANCE || i == j) continue;
+            if(matrix[i][j] == INFINITY || i == j) continue;
 
             printf("%2d to %2d : %2d : ", i+1, j+1, matrix[i][j]);
             print_path(parent_matrix, i, j);
@@ -135,17 +137,17 @@ int init_random_adjacency_matrix(int n, int *num_edges, int ***matrix, int ***pa
 
         // assign random distances to all edges
         for(j=0; j<i; j++){
-            am[i][j] = 1 + (int)((double)MAX_DISTANCE * rand() / (RAND_MAX + 1.0));
+            am[i][j] = 1 + (int)((double)MAX_RANDOM_DIST * rand() / (RAND_MAX + 1.0));
 
-            if(am[i][j] < MAX_DISTANCE){
+            if(am[i][j] < MAX_RANDOM_DIST){
                 total_distance += am[i][j];
             }
 
             if(oriented){
                 // oriented graph, so i to j can have a different distance than j to i
-                am[j][i] = 1 + (int)((double)MAX_DISTANCE * rand() / (RAND_MAX + 1.0));
+                am[j][i] = 1 + (int)((double)MAX_RANDOM_DIST * rand() / (RAND_MAX + 1.0));
 
-                if(am[j][i] < MAX_DISTANCE){
+                if(am[j][i] < MAX_RANDOM_DIST){
                     total_distance += am[j][i];
                 }
             } else {
@@ -153,11 +155,19 @@ int init_random_adjacency_matrix(int n, int *num_edges, int ***matrix, int ***pa
                 am[j][i] = am[i][j];
             }
 
-            if(am[i][j] == MAX_DISTANCE) m--;
-            if(am[j][i] == MAX_DISTANCE) m--;
+            // if a distance is the max distance, then assume the road does not exist,
+            // and set the distance to infinity
+            if(am[i][j] == MAX_RANDOM_DIST) {
+                am[i][j] = INFINITY;
+                m--;
+            }
+            if(am[j][i] == MAX_RANDOM_DIST) {
+                am[j][i] = INFINITY;
+                m--;
+            }
 
             // store parents, used to restore path later on
-            if(i == j || am[i][j] == MAX_DISTANCE){
+            if(i == j || am[i][j] == INFINITY){
                 pm[i][j] = -1;
             } else {
                 pm[i][j] = i;
@@ -227,7 +237,7 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
         // init each distance to 0 or infinity (max distance in this case)
         // init each parent to -1.
         for(j=0; j<n; j++){
-            am[i][j] = (i == j) ? 0 : MAX_DISTANCE;
+            am[i][j] = (i == j) ? 0 : INFINITY;
             pm[i][j] = -1;
         }
     }
@@ -239,7 +249,7 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
 
         if(!(*oriented)){
             // distance i to j is the same as j to i
-            if(am[i][j] < MAX_DISTANCE){
+            if(am[i][j] < INFINITY){
                 // verify that we did not set this distance yet.
                 // if we did, we increment the number of bad edges, and ignore the distance
                 (*num_bad_edges)++;
