@@ -17,7 +17,7 @@
  *
  * Return: the diameter (longest shortest path between two places)
  */
-int floyd_warshall(int ***matrix, int ***parent, int n){
+int floyd_warshall(int **matrix, int **parent_matrix, int n){
     int i, j, k;
     int new_dist;
     int diameter = 0;
@@ -26,9 +26,9 @@ int floyd_warshall(int ***matrix, int ***parent, int n){
         for(i=0; i<n; i++){
             if(i != k){
                 for(j=0; j<n; j++){
-                    new_dist = (*matrix)[i][k] + (*matrix)[k][j];
-                    if(new_dist < (*matrix)[i][j]){
-                        (*matrix)[i][j] = new_dist;
+                    new_dist = matrix[i][k] + matrix[k][j];
+                    if(new_dist < matrix[i][j]){
+                        matrix[i][j] = new_dist;
 
                         if(new_dist > diameter){
                             diameter = new_dist;
@@ -37,7 +37,7 @@ int floyd_warshall(int ***matrix, int ***parent, int n){
                         // we just added a new node to the path between i and j (k),
                         // so add k as the parent of j. So to go from i to j, k will
                         // be visited directly before j.
-                        (*parent)[i][j] = (*parent)[k][j];
+                        parent_matrix[i][j] = parent_matrix[k][j];
                     }
                 }
             }
@@ -305,7 +305,7 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
 
-    diameter = floyd_warshall(&matrix, &parent_matrix, num_vertices);
+    diameter = floyd_warshall(matrix, parent_matrix, num_vertices);
 
     if(gettimeofday(&end, 0) != 0){
         fprintf(stderr, "Error stopping timer\n");
