@@ -195,8 +195,10 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
         }
 
         // init each distance to 0 or infinity (max distance in this case)
+        // init each parent to -1.
         for(j=0; j<n; j++){
             am[i][j] = (i == j) ? 0 : MAX_DISTANCE;
+            pm[i][j] = -1;
         }
     }
 
@@ -214,18 +216,17 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
             } else {
                 am[i][j] = dist;
                 am[j][i] = dist;
+
+                pm[i][j] = i;
+                pm[j][i] = j;
+
                 total_distance += dist;
             }
         } else {
             am[i][j] = dist;
-            total_distance += dist;
-        }
-
-        // store parents, used to restore path later on
-        if(i == j || am[i][j] == MAX_DISTANCE){
-            pm[i][j] = -1;
-        } else {
             pm[i][j] = i;
+
+            total_distance += dist;
         }
     }
 
