@@ -14,10 +14,13 @@
 /**
  * Apply the Floyd-Warshall algorithm to the adjacency matrix,
  * and keep track of paths in the parent matrix.
+ *
+ * Return: the diameter (longest shortest path between two places)
  */
-void floyd_warshall(int ***matrix, int ***parent, int n){
+int floyd_warshall(int ***matrix, int ***parent, int n){
     int i, j, k;
     int new_dist;
+    int diameter = 0;
 
     for(k=0; k<n; k++){
         for(i=0; i<n; i++){
@@ -26,6 +29,10 @@ void floyd_warshall(int ***matrix, int ***parent, int n){
                     new_dist = (*matrix)[i][k] + (*matrix)[k][j];
                     if(new_dist < (*matrix)[i][j]){
                         (*matrix)[i][j] = new_dist;
+
+                        if(new_dist > diameter){
+                            diameter = new_dist;
+                        }
 
                         // we just added a new node to the path between i and j (k),
                         // so add k as the parent of j. So to go from i to j, k will
@@ -36,6 +43,8 @@ void floyd_warshall(int ***matrix, int ***parent, int n){
             }
         }
     }
+
+    return diameter;
 
 }
 
@@ -254,7 +263,8 @@ int main(int argc, char **argv){
     int **matrix;           // adjacency matrix
     int **parent_matrix;    // matrix used to restore paths
     int num_bad_edges = 0;  // number of bad edges in file
-    int total_distance = 0;
+    int total_distance;
+    int diameter;
     char filename[100];     // filename if given as param
 
     struct timeval start, end;
@@ -295,7 +305,7 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
 
-    floyd_warshall(&matrix, &parent_matrix, num_vertices);
+    diameter = floyd_warshall(&matrix, &parent_matrix, num_vertices);
 
     if(gettimeofday(&end, 0) != 0){
         fprintf(stderr, "Error stopping timer\n");
@@ -307,6 +317,7 @@ int main(int argc, char **argv){
 
 
     fprintf(stderr, "Total distance: %d\n", total_distance);
+    fprintf(stderr, "Diameter: %d\n", diameter);
     fprintf(stderr, "ASP took %10.3f seconds\n", time);
 
     if(print){
