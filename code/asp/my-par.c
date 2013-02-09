@@ -4,14 +4,18 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <limits.h>
+#include "mpi.h"
 
 //#define VERBOSE
 
 // use half of max integer value because we add two values later on (and we don't want overflows)
 // note that the max_distance in the example (256) was incorrect, because some distances where > 256
-#define INFINITY INT_MAX/2
-
-#define MAX_RANDOM_DIST 256
+#define INFINITY            INT_MAX/2
+#define MAX_RANDOM_DIST     256
+#define MASTER_PROC_ID        0
+#define ROWS_TAG            1
+#define NUM_ROWS_TAG        2
+#define NUM_VERTICES_TAG    3
 
 /**
  * Apply the Floyd-Warshall algorithm to the adjacency matrix,
@@ -48,6 +52,96 @@ int floyd_warshall(int **matrix, int **parent_matrix, int n){
 
     return diameter;
 
+}
+
+/**
+ * Receive part of the adjacency matrix from the master.
+ *
+ * Return: the number of rows
+ */
+int receive_rows(int ***my_matrix, int *num_vertices){
+    int num_rows_to_receive, i;
+    int mpi_error;
+    MPI_Status status;
+    int **am;   // received adjacency matrix
+
+    // receive int telling how much rows we will receive
+    mpi_error = MPI_Recv(
+            &num_rows_to_receive, 1, MPI_INT, MASTER_PROC_ID, NUM_ROWS_TAG, MPI_COMM_WORLD, &status);
+
+    // receive int telling how many vertices there are
+    mpi_error = MPI_Recv(
+            num_vertices, 1, MPI_INT, MASTER_PROC_ID, NUM_VERTICES_TAG, MPI_COMM_WORLD, &status);
+
+    am = (int **) malloc(num_rows_to_receive * sizeof(int *));
+    if(am == (int **)0){
+        fprintf(stderr, "Error while allocating memory for adjacency matrix (while receiving)\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // receive the actual rows
+    for(i=0; i<num_rows_to_receive; i++){
+        am[i] = (int *) malloc((*num_vertices) * sizeof(int));
+        if(am[i] == (int *)0){
+            fprintf(stderr, "Error while allocating memory for adjacency matrix (while receiving)\n");
+            exit(EXIT_FAILURE);
+        }
+
+        mpi_error = MPI_Recv(
+                am[i], (*num_vertices), MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD, &status);
+    }
+
+    *my_matrix = am;
+
+    return num_rows_to_receive;
+}
+
+/**
+ * Distribute contiguous rows to processes. Note that this approach
+ * might be improved by using a single array for the matrix
+ * representation. That way, only one send can be done to send multiple
+ * rows, because the memory is adjacent.
+ *
+ * Right now, with a multidimensional array, the arrays are not adjacent,
+ * and therefore have to be sent independently.
+ *
+ * Return: the number of rows the master is responsible for
+ */
+int distribute_rows(int num_vertices, int num_procs, int **matrix){
+    int i, j, start_row, end_row, num_rows_to_send, mpi_error;
+    int avg_rows_per_proc = num_vertices / num_procs;
+    int master_end_row = 0;
+
+    for(i=0; i<num_procs; i++){
+        start_row = i * avg_rows_per_proc;
+        end_row = (i+1) * avg_rows_per_proc;
+
+        if((num_vertices - end_row) < avg_rows_per_proc){
+            end_row = num_vertices;
+        }
+
+        if(i == 0){
+            // for the master we only want to know the end row, not send it
+            // (master already has the matrix)
+            master_end_row = end_row;
+            continue;
+        }
+
+        num_rows_to_send = end_row - start_row;
+
+        // first send number of rows that will follow
+        mpi_error = MPI_Send(&num_rows_to_send, 1, MPI_INT, i, NUM_ROWS_TAG, MPI_COMM_WORLD);
+
+        // then send the number of ints per row (eg number of vertices)
+        mpi_error = MPI_Send(&num_vertices, 1, MPI_INT, i, NUM_VERTICES_TAG, MPI_COMM_WORLD);
+
+        // then send the actual rows
+        for(j=start_row; j<end_row; j++){
+            mpi_error = MPI_Send(matrix[j], num_vertices, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD);
+        }
+    }
+
+    return master_end_row;
 }
 
 /**
@@ -298,22 +392,33 @@ void usage() {
 int main(int argc, char **argv){
     int num_vertices = 0;
     int num_edges = 0;
-    int i;                  // counter to loop through parameters
+    int i;                  // counter to loop through parameters and mpi node ids
     int print = 0;          // print resulting adjacency matrix?
     int oriented = 0;       // whether or not the random matrix is oriented
     int **matrix;           // adjacency matrix
+    int **my_matrix;        // local copy of matrix used by workers (contains less rows than matrix)
     int **parent_matrix;    // matrix used to restore paths
     int num_bad_edges = 0;  // number of bad edges in file
-    int total_distance;
-    int diameter;
+    int total_distance = 0; // total distance of available roads
+    int diameter = 0;       // diameter of the resulting adjacency matrix (longest shortest path)
     char filename[100];     // filename if given as param
+    int mpi_error, num_procs, proc_id;   // used for mpi communication
+    int num_rows = 0;
 
     struct timeval start, end;
     double time;
 
 
+    // initialize mpi, get my process id, get total number of processes
+    mpi_error = MPI_Init(&argc, &argv);
+    mpi_error = MPI_Comm_rank(MPI_COMM_WORLD, &proc_id);
+    mpi_error = MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+
+
     // print usage
-    usage();
+    if(proc_id == MASTER_PROC_ID){
+        usage();
+    }
 
     // read params
     for(i=1; i<argc; i++){
@@ -331,42 +436,70 @@ int main(int argc, char **argv){
         }
     }
 
-    if(num_vertices > 0){
-        // init random adjacency matrix for testing
-        total_distance = init_random_adjacency_matrix(num_vertices, &num_edges, &matrix, &parent_matrix, oriented);
+    // let process 0 create the adjacency matrix, and send it to the slaves
+    if(proc_id == MASTER_PROC_ID){
+        // create matrix
+        if(num_vertices > 0){
+            // init random adjacency matrix for testing
+            total_distance = init_random_adjacency_matrix(num_vertices, &num_edges, &matrix, &parent_matrix, oriented);
+        } else {
+            // generate adjacency matrix from file
+            total_distance = read_adjacency_matrix(filename, &num_vertices, &num_edges, &matrix, &parent_matrix, &oriented, &num_bad_edges);
+        }
+
+        fprintf(stderr, "Running ASP with %d rows and %d edges (%d are bad)\n", num_vertices, num_edges, num_bad_edges);
+
+        // start timer
+        if(gettimeofday(&start, 0) != 0){
+            fprintf(stderr, "Error starting timer\n");
+            exit(EXIT_FAILURE);
+        }
+
+        // distribute rows in matrix
+        num_rows = distribute_rows(num_vertices, num_procs, matrix);
+        my_matrix = matrix;
+
     } else {
-        // generate adjacency matrix from file
-        total_distance = read_adjacency_matrix(filename, &num_vertices, &num_edges, &matrix, &parent_matrix, &oriented, &num_bad_edges);
+        // slave, so wait until the rows from the matrix are received
+        num_rows = receive_rows(&my_matrix, &num_vertices);
     }
 
-    fprintf(stderr, "Running ASP with %d rows and %d edges (%d are bad)\n", num_vertices, num_edges, num_bad_edges);
+    // at this moment all workers have their working matrix in my_matrix.
+    // this matrix contains <num_vertices> columns, and <num_rows> rows.
+    printf("[%d] Working with %d rows. Num vertices: %d\n", proc_id, num_rows, num_vertices);
 
-    if(gettimeofday(&start, 0) != 0){
-        fprintf(stderr, "Error starting timer\n");
-        exit(EXIT_FAILURE);
+//    diameter = floyd_warshall(matrix, parent_matrix, num_vertices);
+
+    // let master print runtime, distance, diameter, and paths
+    if(proc_id == MASTER_PROC_ID){
+        if(gettimeofday(&end, 0) != 0){
+            fprintf(stderr, "Error stopping timer\n");
+            exit(EXIT_FAILURE);
+        }
+
+        time = (end.tv_sec + end.tv_usec / 1000000.0) -
+                (start.tv_sec + start.tv_usec / 1000000.0);
+
+
+        fprintf(stderr, "Total distance: %d\n", total_distance);
+        fprintf(stderr, "Diameter: %d\n", diameter);
+        fprintf(stderr, "ASP took %10.3f seconds\n", time);
+
+        if(print){
+            print_paths(matrix, parent_matrix, num_vertices);
+        }
     }
 
-    diameter = floyd_warshall(matrix, parent_matrix, num_vertices);
+    mpi_error = MPI_Finalize();
 
-    if(gettimeofday(&end, 0) != 0){
-        fprintf(stderr, "Error stopping timer\n");
-        exit(EXIT_FAILURE);
+    if(proc_id == MASTER_PROC_ID){
+//        // master frees full matrix
+        free_matrix(matrix, num_vertices);
+        free_matrix(parent_matrix, num_vertices);
+    } else {
+//        // slaves free their local matrix copy
+        free_matrix(my_matrix, num_rows);
     }
-
-    time = (end.tv_sec + end.tv_usec / 1000000.0) -
-            (start.tv_sec + start.tv_usec / 1000000.0);
-
-
-    fprintf(stderr, "Total distance: %d\n", total_distance);
-    fprintf(stderr, "Diameter: %d\n", diameter);
-    fprintf(stderr, "ASP took %10.3f seconds\n", time);
-
-    if(print){
-        print_paths(matrix, parent_matrix, num_vertices);
-    }
-
-    free_matrix(matrix, num_vertices);
-    free_matrix(parent_matrix, num_vertices);
 
     return 0;
 }
