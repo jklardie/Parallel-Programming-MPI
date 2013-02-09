@@ -49,6 +49,36 @@ int floyd_warshall(int **matrix, int **parent_matrix, int n){
 }
 
 /**
+ * Recursively print path between from i to j
+ */
+void print_path(int **parent_matrix, int i, int j){
+    if(j == -1){
+        return;
+    }
+
+    print_path(parent_matrix, i, parent_matrix[i][j]);
+    printf("%2d, ", j+1);
+}
+
+/**
+ * Prints paths between each combination of i and j, if there is any
+ */
+void print_paths(int **matrix, int **parent_matrix, int n){
+    int i, j;
+    for(i=0; i<n; i++){
+        for(j=0; j<n; j++){
+            // no path between i and j
+            if(matrix[i][j] == MAX_DISTANCE || i == j) continue;
+
+            printf("%2d to %2d : %2d : ", i+1, j+1, matrix[i][j]);
+            print_path(parent_matrix, i, j);
+
+            printf("\n");
+        }
+    }
+}
+
+/**
  * Print a given n x n matrix
  */
 void print_matrix(int **matrix, int n){
@@ -322,7 +352,7 @@ int main(int argc, char **argv){
     fprintf(stderr, "ASP took %10.3f seconds\n", time);
 
     if(print){
-        print_matrix(matrix, num_vertices);
+        print_paths(matrix, parent_matrix, num_vertices);
     }
 
     free_matrix(matrix, num_vertices);
