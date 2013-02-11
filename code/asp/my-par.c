@@ -83,7 +83,7 @@ int floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row
     int avg_rows_per_proc = n / num_procs;
 
     for(k=0; k<n; k++){
-		if(k > 0 && k % avg_rows_per_proc == 0){
+		if(k > 0 && k % avg_rows_per_proc == 0 && responsible_proc < num_procs-1){
 			responsible_proc++;
 		}
 		
@@ -688,6 +688,7 @@ int main(int argc, char **argv){
         fprintf(stderr, "Diameter: %d\n", diameter);
         fprintf(stderr, "ASP took %10.3f seconds\n", wtime);
 
+        // please note: printing paths might be very slow. Especially chain_10K.gr.new!
         if(print){
             print_paths(matrix, parent_matrix, num_vertices);
         }
