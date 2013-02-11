@@ -612,8 +612,7 @@ int main(int argc, char **argv){
     int mpi_error, num_procs;   // used for mpi communication
     int start_row = 0, end_row = 0;
 
-    struct timeval start, end;
-    double time;
+    double wtime = 0;
 
 
     // initialize mpi, get my process id, get total number of processes
@@ -666,10 +665,7 @@ int main(int argc, char **argv){
         fprintf(stderr, "Running ASP with %d rows and %d edges (%d are bad)\n", num_vertices, num_edges, num_bad_edges);
 
         // start timer
-        if(gettimeofday(&start, 0) != 0){
-            fprintf(stderr, "Error starting timer\n");
-            exit(EXIT_FAILURE);
-        }
+        wtime = MPI_Wtime();
 
         // distribute rows in matrix
         distribute_rows(num_vertices, num_procs, matrix, parent_matrix, &start_row, &end_row);
@@ -696,18 +692,11 @@ int main(int argc, char **argv){
 
     // let master print runtime, distance, diameter, and paths
     if(my_proc_id == MASTER_PROC_ID){
-        if(gettimeofday(&end, 0) != 0){
-            fprintf(stderr, "Error stopping timer\n");
-            exit(EXIT_FAILURE);
-        }
-
-        time = (end.tv_sec + end.tv_usec / 1000000.0) -
-                (start.tv_sec + start.tv_usec / 1000000.0);
-
+        wtime = MPI_Wtime() - wtime;
 
         fprintf(stderr, "Total distance: %d\n", total_distance);
         fprintf(stderr, "Diameter: %d\n", diameter);
-        fprintf(stderr, "ASP took %10.3f seconds\n", time);
+        fprintf(stderr, "ASP took %10.3f seconds\n", wtime);
 
         if(print){
             print_paths(matrix, parent_matrix, num_vertices);
