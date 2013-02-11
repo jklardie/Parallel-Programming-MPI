@@ -442,10 +442,14 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
 
     fp = fopen(filename, "r");
     if(fp == NULL){
-        printf("Error opening file '%s': %s\n", filename, strerror(errno));
+        fprintf(stderr, "Error opening file '%s': %s\n", filename, strerror(errno));
         exit(EXIT_FAILURE);
     }
-    fscanf(fp, "%d %d %d \n", num_vertices, num_edges, oriented);
+    
+    if(fscanf(fp, "%d %d %d \n", num_vertices, num_edges, oriented) == EOF){
+    	fprintf(stderr, "Error reading file '%s': %s\n", filename, strerror(errno));
+    	exit(EXIT_FAILURE);
+    }
 
     #ifdef VERBOSE
         printf("%d %d %d\n", *num_vertices, *num_edges, *oriented);
@@ -476,7 +480,11 @@ int read_adjacency_matrix(char *filename, int *num_vertices, int *num_edges, int
     }
 
     while(!feof(fp)){
-        fscanf(fp, "%d %d %d \n", &source, &dest, &dist);
+        if(fscanf(fp, "%d %d %d \n", &source, &dest, &dist) == EOF){
+			fprintf(stderr, "Error rows from file '%s': %s\n", filename, strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+        
         i = source-1;
         j = dest-1;
 
