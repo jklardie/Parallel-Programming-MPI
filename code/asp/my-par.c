@@ -74,16 +74,15 @@ void broadcast(int **row, int **parent_matrix_row, int proc_id, int n){
  *
  * Return: the diameter (longest shortest path between two places)
  */
-int floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row, int n){
+int floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row, int n, int num_procs){
     int i, j, k;
     int new_dist;
     int diameter = 0;
     int responsible_proc = 0;
-    int num_rows = end_row - start_row;
+    int avg_rows_per_proc = n / num_procs;
 
     for(k=0; k<n; k++){
-    	// FIXME: this won't work when different nodes have different number of rows
-		if(k > 0 && k % num_rows == 0){
+		if(k > 0 && k % avg_rows_per_proc == 0){
 			responsible_proc++;
 		}
 		
@@ -682,7 +681,7 @@ int main(int argc, char **argv){
     // at this moment all workers have their working matrix in my_matrix.
     // this matrix contains <num_vertices> columns, and <num_rows> rows.
 
-    diameter = floyd_warshall(matrix, parent_matrix, start_row, end_row, num_vertices);
+    diameter = floyd_warshall(matrix, parent_matrix, start_row, end_row, num_vertices, num_procs);
     
     if(my_proc_id == MASTER_PROC_ID){
     	// master needs to receive all other rows
