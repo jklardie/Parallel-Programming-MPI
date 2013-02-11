@@ -38,11 +38,17 @@ void broadcast(int **row, int proc_id, int num_vertices){
         int *r = (int *) malloc(num_vertices * sizeof(int));
     	
 		mpi_error = MPI_Bcast(r, num_vertices, MPI_INT, proc_id, MPI_COMM_WORLD);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
 		
 		*row = r;
     } else {
     	// I have the row to be broadcasted
     	mpi_error = MPI_Bcast(*row, num_vertices, MPI_INT, proc_id, MPI_COMM_WORLD);
+    	if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
     }
 
 }
@@ -105,19 +111,25 @@ int receive_final_rows(int **matrix, int num_procs, int num_vertices){
 	// note start loop at i=1, because we don't need to receive it from ourselve
 	for(i=1; i<num_procs; i++){
 		// receive int telling how much rows we will receive
-		mpi_error = MPI_Recv(
-				&num_rows_to_receive, 1, MPI_INT, i, NUM_ROWS_TAG, MPI_COMM_WORLD, &status);
-	
+		mpi_error = MPI_Recv(&num_rows_to_receive, 1, MPI_INT, i, NUM_ROWS_TAG, MPI_COMM_WORLD, &status);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
+		
 		// receive int telling what our first row is we'll receive
-		mpi_error = MPI_Recv(
-					&start_row, 1, MPI_INT, i, START_ROW_TAG, MPI_COMM_WORLD, &status);
-	
+		mpi_error = MPI_Recv(&start_row, 1, MPI_INT, i, START_ROW_TAG, MPI_COMM_WORLD, &status);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
+		
 		end_row = start_row + num_rows_to_receive;
 	
 		// receive the actual rows
 		for(j=start_row; j<end_row; j++){
-			mpi_error = MPI_Recv(
-					matrix[j], num_vertices, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD, &status);
+			mpi_error = MPI_Recv(matrix[j], num_vertices, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD, &status);
+			if(mpi_error != MPI_SUCCESS){
+				exit(EXIT_FAILURE);
+			}
 			
 			for(j=0; j<num_vertices; j++){
 				if(matrix[i][j] > diameter){
@@ -137,15 +149,24 @@ void send_rows_to_master(int **matrix, int start_row, int end_row, int num_verti
 
 	// first send number of rows that will follow
 	mpi_error = MPI_Send(&num_rows_to_send, 1, MPI_INT, MASTER_PROC_ID, NUM_ROWS_TAG, MPI_COMM_WORLD);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
 
 	// send the start_row to the worker
 	mpi_error = MPI_Send(&start_row, 1, MPI_INT, MASTER_PROC_ID, START_ROW_TAG, MPI_COMM_WORLD);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
 	
 	// note: we don't have to send the number of vertices, the master already knows that
 
 	// then send the actual rows
 	for(i=start_row; i<end_row; i++){
 		mpi_error = MPI_Send(matrix[i], num_vertices, MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
 	}
 }
 
@@ -161,19 +182,25 @@ void receive_rows(int ***matrix, int *num_vertices, int *start_row, int *end_row
     int **am;   // received adjacency matrix
 
     // receive int telling how much rows we will receive
-    mpi_error = MPI_Recv(
-            &num_rows_to_receive, 1, MPI_INT, MASTER_PROC_ID, NUM_ROWS_TAG, MPI_COMM_WORLD, &status);
+    mpi_error = MPI_Recv(&num_rows_to_receive, 1, MPI_INT, MASTER_PROC_ID, NUM_ROWS_TAG, MPI_COMM_WORLD, &status);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
 
     // receive int telling what our first row is we'll receive
-    mpi_error = MPI_Recv(
-                start_row, 1, MPI_INT, MASTER_PROC_ID, START_ROW_TAG, MPI_COMM_WORLD, &status);
-
+    mpi_error = MPI_Recv(start_row, 1, MPI_INT, MASTER_PROC_ID, START_ROW_TAG, MPI_COMM_WORLD, &status);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
+	
     *end_row = *start_row + num_rows_to_receive;
 
     // receive int telling how many vertices there are
-    mpi_error = MPI_Recv(
-            num_vertices, 1, MPI_INT, MASTER_PROC_ID, NUM_VERTICES_TAG, MPI_COMM_WORLD, &status);
-
+    mpi_error = MPI_Recv(num_vertices, 1, MPI_INT, MASTER_PROC_ID, NUM_VERTICES_TAG, MPI_COMM_WORLD, &status);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
+	
     am = (int **) malloc((*num_vertices) * sizeof(int *));
     if(am == (int **)0){
         fprintf(stderr, "Error while allocating memory for adjacency matrix (while receiving)\n");
@@ -188,8 +215,10 @@ void receive_rows(int ***matrix, int *num_vertices, int *start_row, int *end_row
             exit(EXIT_FAILURE);
         }
 
-        mpi_error = MPI_Recv(
-                am[i], *num_vertices, MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD, &status);
+        mpi_error = MPI_Recv(am[i], *num_vertices, MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD, &status);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
     }
 
     *matrix = am;
@@ -228,16 +257,28 @@ void distribute_rows(int num_vertices, int num_procs, int **matrix, int *start_r
 
         // first send number of rows that will follow
         mpi_error = MPI_Send(&num_rows_to_send, 1, MPI_INT, i, NUM_ROWS_TAG, MPI_COMM_WORLD);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
 
         // send the start_row to the worker
         mpi_error = MPI_Send(&start, 1, MPI_INT, i, START_ROW_TAG, MPI_COMM_WORLD);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
 
         // then send the number of ints per row (eg number of vertices)
         mpi_error = MPI_Send(&num_vertices, 1, MPI_INT, i, NUM_VERTICES_TAG, MPI_COMM_WORLD);
+		if(mpi_error != MPI_SUCCESS){
+			exit(EXIT_FAILURE);
+		}
 
         // then send the actual rows
         for(j=start; j<end; j++){
             mpi_error = MPI_Send(matrix[j], num_vertices, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD);
+    		if(mpi_error != MPI_SUCCESS){
+    			exit(EXIT_FAILURE);
+    		}
         }
     }
 }
@@ -508,8 +549,19 @@ int main(int argc, char **argv){
 
     // initialize mpi, get my process id, get total number of processes
     mpi_error = MPI_Init(&argc, &argv);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
+	
     mpi_error = MPI_Comm_rank(MPI_COMM_WORLD, &my_proc_id);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
+	
     mpi_error = MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
 
 
     // print usage
@@ -603,6 +655,9 @@ int main(int argc, char **argv){
     }
     
     mpi_error = MPI_Finalize();
+	if(mpi_error != MPI_SUCCESS){
+		exit(EXIT_FAILURE);
+	}
     
     return 0;
 }
