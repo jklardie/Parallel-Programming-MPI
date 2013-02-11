@@ -13,10 +13,11 @@
 #define INFINITY            INT_MAX/2
 #define MAX_RANDOM_DIST     256
 #define MASTER_PROC_ID      0
-#define ROWS_TAG            1
-#define NUM_ROWS_TAG        2
-#define START_ROW_TAG       3
-#define NUM_VERTICES_TAG    4
+#define ROWS_TAG            10000
+#define PARENT_ROWS_TAG     20000
+#define NUM_ROWS_TAG        3
+#define START_ROW_TAG       4
+#define NUM_VERTICES_TAG    5
 
 int my_proc_id;
 
@@ -120,45 +121,44 @@ int floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row
  * Return: the diameter in the received rows (longest shortest path between two places)
  */
 int receive_final_rows(int **matrix, int **parent_matrix, int num_procs, int n){
-	int num_rows_to_receive, start_row, end_row, i, j;
+	int num_rows_to_receive, start_row, end_row, i, j, k;
 	int mpi_error;
 	int diameter = 0;
-	MPI_Status status;
 	
 	
 	// note start loop at i=1, because we don't need to receive it from ourselve
 	for(i=1; i<num_procs; i++){
 		// receive int telling how much rows we will receive
-		mpi_error = MPI_Recv(&num_rows_to_receive, 1, MPI_INT, i, NUM_ROWS_TAG, MPI_COMM_WORLD, &status);
+		mpi_error = MPI_Recv(&num_rows_to_receive, 1, MPI_INT, i, NUM_ROWS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		if(mpi_error != MPI_SUCCESS){
 			exit(EXIT_FAILURE);
 		}
 		
 		// receive int telling what our first row is we'll receive
-		mpi_error = MPI_Recv(&start_row, 1, MPI_INT, i, START_ROW_TAG, MPI_COMM_WORLD, &status);
+		mpi_error = MPI_Recv(&start_row, 1, MPI_INT, i, START_ROW_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		if(mpi_error != MPI_SUCCESS){
 			exit(EXIT_FAILURE);
 		}
 		
 		end_row = start_row + num_rows_to_receive;
-	
+
 		// receive the actual rows
 		for(j=start_row; j<end_row; j++){
 			// receive adjacency matrix row
-			mpi_error = MPI_Recv(matrix[j], n, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD, &status);
+			mpi_error = MPI_Recv(matrix[j], n, MPI_INT, i, ROWS_TAG+j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			if(mpi_error != MPI_SUCCESS){
 				exit(EXIT_FAILURE);
 			}
 			
 			// receive parent matrix row
-			mpi_error = MPI_Recv(parent_matrix[j], n, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD, &status);
+			mpi_error = MPI_Recv(parent_matrix[j], n, MPI_INT, i, PARENT_ROWS_TAG+j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			if(mpi_error != MPI_SUCCESS){
 				exit(EXIT_FAILURE);
 			}
 			
-			for(j=0; j<n; j++){
-				if(matrix[i][j] > diameter){
-					diameter = matrix[i][j];
+			for(k=0; k<n; k++){
+				if(matrix[j][k] > diameter){
+					diameter = matrix[j][k];
 				}
 			}
 		}
@@ -192,13 +192,13 @@ void send_rows_to_master(int **matrix, int **parent_matrix, int start_row, int e
 	// then send the actual rows
 	for(i=start_row; i<end_row; i++){
 		// send adjacency matrix row
-		mpi_error = MPI_Send(matrix[i], n, MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD);
+		mpi_error = MPI_Send(matrix[i], n, MPI_INT, MASTER_PROC_ID, ROWS_TAG+i, MPI_COMM_WORLD);
 		if(mpi_error != MPI_SUCCESS){
 			exit(EXIT_FAILURE);
 		}
 		
 		// send parent matrix row
-		mpi_error = MPI_Send(parent_matrix[i], n, MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD);
+		mpi_error = MPI_Send(parent_matrix[i], n, MPI_INT, MASTER_PROC_ID, PARENT_ROWS_TAG+i, MPI_COMM_WORLD);
 		if(mpi_error != MPI_SUCCESS){
 			exit(EXIT_FAILURE);
 		}
@@ -213,18 +213,17 @@ void send_rows_to_master(int **matrix, int **parent_matrix, int start_row, int e
 void receive_rows(int ***matrix, int ***parent_matrix, int *n, int *start_row, int *end_row){
     int num_rows_to_receive, i;
     int mpi_error;
-    MPI_Status status;
     int **am;	// received adjacency matrix
     int **pm;	// received parent matrix
 
     // receive int telling how much rows we will receive
-    mpi_error = MPI_Recv(&num_rows_to_receive, 1, MPI_INT, MASTER_PROC_ID, NUM_ROWS_TAG, MPI_COMM_WORLD, &status);
+    mpi_error = MPI_Recv(&num_rows_to_receive, 1, MPI_INT, MASTER_PROC_ID, NUM_ROWS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	if(mpi_error != MPI_SUCCESS){
 		exit(EXIT_FAILURE);
 	}
 
     // receive int telling what our first row is we'll receive
-    mpi_error = MPI_Recv(start_row, 1, MPI_INT, MASTER_PROC_ID, START_ROW_TAG, MPI_COMM_WORLD, &status);
+    mpi_error = MPI_Recv(start_row, 1, MPI_INT, MASTER_PROC_ID, START_ROW_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	if(mpi_error != MPI_SUCCESS){
 		exit(EXIT_FAILURE);
 	}
@@ -232,45 +231,36 @@ void receive_rows(int ***matrix, int ***parent_matrix, int *n, int *start_row, i
     *end_row = *start_row + num_rows_to_receive;
 
     // receive int telling how many vertices there are
-    mpi_error = MPI_Recv(n, 1, MPI_INT, MASTER_PROC_ID, NUM_VERTICES_TAG, MPI_COMM_WORLD, &status);
+    mpi_error = MPI_Recv(n, 1, MPI_INT, MASTER_PROC_ID, NUM_VERTICES_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	if(mpi_error != MPI_SUCCESS){
 		exit(EXIT_FAILURE);
 	}
 	
     am = (int **) malloc((*n) * sizeof(int *));
-    if(am == (int **)0){
-        fprintf(stderr, "Error while allocating memory for adjacency matrix (while receiving)\n");
-        exit(EXIT_FAILURE);
-    }
-
     pm = (int **) malloc((*n) * sizeof(int *));
-    if(am == (int **)0){
-        fprintf(stderr, "Error while allocating memory for parent matrix (while receiving)\n");
+    if(am == (int **)0 || am == (int **)0){
+        fprintf(stderr, "Error while allocating memory for adjacency matrix (while receiving)\n");
         exit(EXIT_FAILURE);
     }
 
     // receive the actual rows
     for(i=(*start_row); i<(*end_row); i++){
         am[i] = (int *) malloc((*n) * sizeof(int));
-        if(am[i] == (int *)0){
+        pm[i] = (int *) malloc((*n) * sizeof(int));
+
+        if(am[i] == (int *)0 || pm[i] == (int *)0){
             fprintf(stderr, "Error while allocating memory for adjacency matrix (while receiving)\n");
             exit(EXIT_FAILURE);
         }
         
-        pm[i] = (int *) malloc((*n) * sizeof(int));
-		if(pm[i] == (int *)0){
-			fprintf(stderr, "Error while allocating memory for parent matrix (while receiving)\n");
-			exit(EXIT_FAILURE);
-		}
-
 		// receive adjacency matrix row
-        mpi_error = MPI_Recv(am[i], *n, MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD, &status);
+        mpi_error = MPI_Recv(am[i], *n, MPI_INT, MASTER_PROC_ID, ROWS_TAG+i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		if(mpi_error != MPI_SUCCESS){
 			exit(EXIT_FAILURE);
 		}
 		
 		// receive parent matrix row
-		mpi_error = MPI_Recv(pm[i], *n, MPI_INT, MASTER_PROC_ID, ROWS_TAG, MPI_COMM_WORLD, &status);
+		mpi_error = MPI_Recv(pm[i], *n, MPI_INT, MASTER_PROC_ID, PARENT_ROWS_TAG+i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		if(mpi_error != MPI_SUCCESS){
 			exit(EXIT_FAILURE);
 		}
@@ -332,13 +322,13 @@ void distribute_rows(int n, int num_procs, int **matrix, int **parent_matrix, in
         // then send the actual rows
         for(j=start; j<end; j++){
         	// send adjacency matrix row
-            mpi_error = MPI_Send(matrix[j], n, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD);
+            mpi_error = MPI_Send(matrix[j], n, MPI_INT, i, ROWS_TAG+j, MPI_COMM_WORLD);
     		if(mpi_error != MPI_SUCCESS){
     			exit(EXIT_FAILURE);
     		}
     		
     		// send parent matrix row
-    		mpi_error = MPI_Send(parent_matrix[j], n, MPI_INT, i, ROWS_TAG, MPI_COMM_WORLD);
+    		mpi_error = MPI_Send(parent_matrix[j], n, MPI_INT, i, PARENT_ROWS_TAG+j, MPI_COMM_WORLD);
 			if(mpi_error != MPI_SUCCESS){
 				exit(EXIT_FAILURE);
 			}
@@ -702,7 +692,6 @@ int main(int argc, char **argv){
             print_paths(matrix, parent_matrix, num_vertices);
         }
     }
-
 
     free_matrix(matrix, num_vertices);
 
