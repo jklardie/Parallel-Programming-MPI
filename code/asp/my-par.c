@@ -672,7 +672,7 @@ int main(int argc, char **argv){
     
     if(my_proc_id == MASTER_PROC_ID){
     	// master needs to receive all other rows
-    	int diameter = receive_final_rows(matrix, parent_matrix, num_procs, num_vertices, start_row, end_row);
+    	diameter = receive_final_rows(matrix, parent_matrix, num_procs, num_vertices, start_row, end_row);
     } else {
     	// slave needs to send his rows to the master
     	send_rows_to_master(matrix, parent_matrix, start_row, end_row, num_vertices);
