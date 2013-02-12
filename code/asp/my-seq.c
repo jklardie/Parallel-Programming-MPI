@@ -16,13 +16,10 @@
 /**
  * Apply the Floyd-Warshall algorithm to the adjacency matrix,
  * and keep track of paths in the parent matrix.
- *
- * Return: the diameter (longest shortest path between two places)
  */
-int floyd_warshall(int **matrix, int **parent_matrix, int n){
+void floyd_warshall(int **matrix, int **parent_matrix, int n){
     int i, j, k;
     int new_dist;
-    int diameter = 0;
 
     for(k=0; k<n; k++){
         for(i=0; i<n; i++){
@@ -31,10 +28,6 @@ int floyd_warshall(int **matrix, int **parent_matrix, int n){
                     new_dist = matrix[i][k] + matrix[k][j];
                     if(new_dist < matrix[i][j]){
                         matrix[i][j] = new_dist;
-
-                        if(new_dist > diameter){
-                            diameter = new_dist;
-                        }
 
                         // we just added a new node to the path between i and j (k),
                         // so add k as the parent of j. So to go from i to j, k will
@@ -46,8 +39,21 @@ int floyd_warshall(int **matrix, int **parent_matrix, int n){
         }
     }
 
-    return diameter;
 
+}
+
+int calculate_diameter(int **matrix, int n){
+    int diameter = 0, i, j;
+
+    for(i=0; i<n; i++){
+        for(j=0; j<n; j++){
+            if(matrix[i][j] > diameter && matrix[i][j] < INFINITY){
+                diameter = matrix[i][j];
+            }
+        }
+    }
+
+    return diameter;
 }
 
 /**
@@ -346,7 +352,9 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
 
-    diameter = floyd_warshall(matrix, parent_matrix, num_vertices);
+    floyd_warshall(matrix, parent_matrix, num_vertices);
+
+    diameter = calculate_diameter(matrix, num_vertices);
 
     if(gettimeofday(&end, 0) != 0){
         fprintf(stderr, "Error stopping timer\n");

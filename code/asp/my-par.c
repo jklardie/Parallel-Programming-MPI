@@ -72,8 +72,6 @@ void broadcast(int **row, int **parent_matrix_row, int proc_id, int n){
 /**
  * Apply the Floyd-Warshall algorithm to the adjacency matrix,
  * and keep track of paths in the parent matrix.
- *
- * Return: the diameter (longest shortest path between two places)
  */
 void floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row, int n, int num_procs){
     int i, j, k;
