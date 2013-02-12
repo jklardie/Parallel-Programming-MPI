@@ -75,10 +75,9 @@ void broadcast(int **row, int **parent_matrix_row, int proc_id, int n){
  *
  * Return: the diameter (longest shortest path between two places)
  */
-int floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row, int n, int num_procs){
+void floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row, int n, int num_procs){
     int i, j, k;
     int new_dist;
-    int diameter = 0;
     int responsible_proc = 0;
     int avg_rows_per_proc = n / num_procs;
 
@@ -97,22 +96,16 @@ int floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row
                     if(new_dist < matrix[i][j]){
                         matrix[i][j] = new_dist;
 
-                        if(new_dist > diameter){
-                            diameter = new_dist;
-                        }
-                        
 						// we just added a new node to the path between i and j (k),
 						// so add k as the parent of j. So to go from i to j, k will
 						// be visited directly before j.
 						parent_matrix[i][j] = parent_matrix[k][j];
                     }
                 }
+
             }
         }
-        
     }
-    
-    return diameter;
 }
 
 /**
@@ -120,11 +113,10 @@ int floyd_warshall(int **matrix, int **parent_matrix, int start_row, int end_row
  * 
  * Return: the diameter in the received rows (longest shortest path between two places)
  */
-int receive_final_rows(int **matrix, int **parent_matrix, int num_procs, int n){
+int receive_final_rows(int **matrix, int **parent_matrix, int num_procs, int n, int my_start, int my_end){
 	int num_rows_to_receive, start_row, end_row, i, j, k;
 	int mpi_error;
 	int diameter = 0;
-	
 	
 	// note start loop at i=1, because we don't need to receive it from ourselve
 	for(i=1; i<num_procs; i++){
@@ -164,6 +156,15 @@ int receive_final_rows(int **matrix, int **parent_matrix, int num_procs, int n){
 		}
 	}
 	
+	// calculate actual diameter (need to look at my own rows)
+	for(i=my_start; i<my_end; i++){
+	    for(j=0; j<n; j++){
+            if(matrix[i][j] > diameter){
+                diameter = matrix[i][j];
+            }
+        }
+	}
+
 	return diameter;
 }
 
@@ -667,14 +668,11 @@ int main(int argc, char **argv){
     // at this moment all workers have their working matrix in my_matrix.
     // this matrix contains <num_vertices> columns, and <num_rows> rows.
 
-    diameter = floyd_warshall(matrix, parent_matrix, start_row, end_row, num_vertices, num_procs);
+    floyd_warshall(matrix, parent_matrix, start_row, end_row, num_vertices, num_procs);
     
     if(my_proc_id == MASTER_PROC_ID){
     	// master needs to receive all other rows
-    	int slave_diameter = receive_final_rows(matrix, parent_matrix, num_procs, num_vertices);
-    	if(slave_diameter > diameter){
-    		diameter = slave_diameter;
-    	}
+    	int diameter = receive_final_rows(matrix, parent_matrix, num_procs, num_vertices, start_row, end_row);
     } else {
     	// slave needs to send his rows to the master
     	send_rows_to_master(matrix, parent_matrix, start_row, end_row, num_vertices);
