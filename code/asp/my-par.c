@@ -149,7 +149,7 @@ int receive_final_rows(int **matrix, int **parent_matrix, int num_procs, int n, 
 			}
 			
 			for(k=0; k<n; k++){
-				if(matrix[j][k] > diameter){
+				if(matrix[j][k] > diameter && matrix[j][k] < INFINITY){
 					diameter = matrix[j][k];
 				}
 			}
@@ -159,7 +159,7 @@ int receive_final_rows(int **matrix, int **parent_matrix, int num_procs, int n, 
 	// calculate actual diameter (need to look at my own rows)
 	for(i=my_start; i<my_end; i++){
 	    for(j=0; j<n; j++){
-            if(matrix[i][j] > diameter){
+            if(matrix[i][j] > diameter && matrix[i][j] < INFINITY){
                 diameter = matrix[i][j];
             }
         }
